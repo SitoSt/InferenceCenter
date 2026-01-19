@@ -24,3 +24,13 @@ connect_wifi.sh
 
 # Mac OS
 .DS_Store
+
+# Local Docs and Notes
+*.md
+!README.md
+!IMPLEMENTATION_PLAN.md
+
+# Models and Environments
+models/
+dl_models_env/
+Models/

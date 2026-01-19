@@ -16,7 +16,11 @@ add_subdirectory(llama.cpp)
 find_package(Threads REQUIRED)
 
 # 3. Tu ejecutable
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME} 
+    src/main.cpp 
+    src/core/Engine.cpp
+)
+target_include_directories(${PROJECT_NAME} PRIVATE src/core)
 
 # 4. Enlazar usando los nombres de los objetivos, no rutas a archivos
 # Esto gestiona automáticamente las cabeceras (.h) y los archivos (.a)
