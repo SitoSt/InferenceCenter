@@ -19,9 +19,9 @@ src/
 │   ├── Scheduler.cpp/.h     # Cola de peticiones (Thread-safe)
 │   └── Allocator.cpp/.h     # Gestión de memoria pre-reservada (KV Cache)
 ├── server/
-│   ├── WsServer.cpp/.h      # Servidor WebSocket de alto rendimiento (uWebSockets/WebSocket++)
-│   ├── Protocol.h           # Definición de OPCODES y estructura de paquetes binarios/JSON
-│   └── EventHandler.cpp     # Dispatcher de eventos (bidi-direccional)
+│   ├── WsServer.cpp/.h      # Wrapper sobre uWebSockets
+│   ├── Client.h             # Estructura de estado por cliente
+│   └── Protocol.h           # Constantes y Parsers JSON
 ├── hardware/
 │   └── Monitor.cpp/.h       # Interfaz con NVML (Nvidia Management Library) para temperaturas/VRAM
 └── main.cpp                 # Punto de entrada y gestión de señales (SIGINT, SIGTERM)
@@ -49,10 +49,11 @@ Dado el límite de 3GB VRAM, implementaremos un cargador inteligente:
 - **Logging Estructurado**: Logs rotativos para diagnóstico post-mortem.
 
 ## 4. Stack Tecnológico
-- **Lenguaje**: C++17 (o C++20 si el compilador lo soporta bien).
-- **Core ML**: `llama.cpp` (linkado estático/directo).
-- **Networking**: **uWebSockets** (uWS) o **WebSocket++** (Asio). Prioridad: Rendimiento y baja latencia.
-- **JSON**: `nlohmann/json` (estándar de facto, robusto).
+- **Lenguaje**: C++17.
+- **Core ML**: `llama.cpp`.
+- **Networking**: `uWebSockets` (uWS) + `uSockets`. 
+    - **Motivo**: Arquitectura basada en eventos (libuv/epoll), uso de memoria mínimo y rendimiento superior a Asio.
+- **JSON**: `nlohmann/json`.
 - **Monitorización**: `nvidia-ml` (NVML) para datos de GPU.
 
 ## 5. Roadmap de Desarrollo
@@ -63,10 +64,29 @@ Dado el límite de 3GB VRAM, implementaremos un cargador inteligente:
 - [ ] Implementar bucle de generación simple.
 
 ### Fase 2: Servidor WebSocket (Conectividad Real-Time)
-- [ ] Integrar librería WebSocket de alto rendimiento.
-- [ ] Definir protocolo de comunicación (Handshake, Heartbeat, Data). **IMPORTANTE**
-- [ ] Implementar Streaming de tokens en tiempo real.
-- [ ] Gestión de múltiples conexiones (Cola de espera si la GPU está ocupada).
+#### 2.1 Dependencias
+- [ ] Configurar `FetchContent` en CMake para descargar `uWebSockets` y `uSockets`.
+- [ ] Configurar `nlohmann/json`.
+
+#### 2.2 Protocolo (JSON sobre WS)
+**Client -> Server**
+- `INFER`: `{ "op": "infer", "prompt": "...", "params": { "temp": 0.7 } }`
+- `ABORT`: `{ "op": "abort" }`
+
+**Server -> Client**
+- `HELLO`: `{ "op": "hello", "status": "ready", "model": "..." }`
+- `TOKEN`: `{ "op": "token", "content": " The" }`
+- `END`:   `{ "op": "end", "stats": { "ms": 1200, "tps": 45.2 } }`
+- `ERROR`: `{ "op": "error", "message": "OOM" }`
+
+#### 2.3 Implementación
+- [ ] Crear clase `WsServer` (Singleton o gestor principal).
+- [ ] Loop de eventos en hilo principal.
+- [ ] Cola de tareas: El WebSocket corre en el Hilo A, el `Engine` en el Hilo B.
+- [ ] Implementar métricas: TPS (Tokens/sec), Latencia TTFT (Time To First Token), Tiempo total.
+    - Cuando llega `INFER`, se encola.
+    - El Hilo B procesa y llama al callback.
+    - El callback (desde Hilo B) debe notificar al Hilo A para enviar el mensaje (uWS no es thread-safe para envíos directos desde otros hilos, requiere `loop->defer`).
 
 ### Fase 3: Optimización y Gestión (Robustez)
 - [ ] Implementar descarga parcial inteligente (CPU/GPU split).

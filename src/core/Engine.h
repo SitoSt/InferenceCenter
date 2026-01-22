@@ -1,6 +1,7 @@
 #pragma once
 
 #include "llama.h"
+#include "Metrics.h"
 #include <string>
 #include <vector>
 #include <functional>
@@ -35,7 +36,8 @@ namespace Core {
         // Run inference
         // prompt: The input text
         // callback: Function called for each generated token
-        void generate(const std::string& prompt, TokenCallback callback);
+        // Returns final metrics
+        Metrics generate(const std::string& prompt, TokenCallback callback);
 
         // Check internal status
         bool isLoaded() const;

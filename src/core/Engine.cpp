@@ -92,8 +92,12 @@ namespace Core {
         return std::string(buf, n);
     }
 
-    void Engine::generate(const std::string& prompt, TokenCallback callback) {
-        if (!isLoaded()) return;
+    Metrics Engine::generate(const std::string& prompt, TokenCallback callback) {
+        Metrics metrics;
+        if (!isLoaded()) return metrics;
+
+        auto start_time = std::chrono::high_resolution_clock::now();
+        bool is_first_token = true;
 
         // 1. Tokenize
         std::vector<llama_token> tokens_list = tokenize(prompt, true);
@@ -104,10 +108,6 @@ namespace Core {
         llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
 
         // 3. Prepare Batch
-        // Allocate batch with specific size
-        // We know we process prompt + generation one by one or chunked
-        // For simplicity, max batch size = max(prompt size, 1) or just default
-        
         llama_batch batch = llama_batch_init(std::max((int)tokens_list.size(), 1), 0, 1); 
 
         // Load prompt
@@ -130,13 +130,11 @@ namespace Core {
             std::cerr << "llama_decode failed" << std::endl;
             llama_batch_free(batch);
             llama_sampler_free(smpl);
-            return;
+            return metrics;
         }
 
         // 4. Generation Loop
         int n_cur = batch.n_tokens;
-        // int n_decode = 0; // Unused
-        
         const llama_vocab* vocab = llama_model_get_vocab(model);
 
         while (true) { 
@@ -146,11 +144,20 @@ namespace Core {
             // Accept/Callbacks
             llama_sampler_accept(smpl, new_token_id);
 
+            // Time to First Token
+            if (is_first_token) {
+                auto now = std::chrono::high_resolution_clock::now();
+                metrics.ttft_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - start_time).count();
+                is_first_token = false;
+            }
+
             if (llama_vocab_is_eog(vocab, new_token_id)) {
                 break;
             }
 
             std::string piece = tokenToPiece(new_token_id);
+            metrics.tokens_generated++;
+
             if (callback) {
                  if (!callback(piece)) break; // User aborted
             }
@@ -173,9 +180,18 @@ namespace Core {
             }
         }
         
+        // Finalize Metrics
+        auto end_time = std::chrono::high_resolution_clock::now();
+        metrics.total_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        if (metrics.total_time_ms > 0) {
+            metrics.tps = (double)metrics.tokens_generated / (metrics.total_time_ms / 1000.0);
+        }
+
         // Cleanup
         llama_batch_free(batch);
         llama_sampler_free(smpl);
+        
+        return metrics;
     }
     
     std::string Engine::getSystemInfo() const {

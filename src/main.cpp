@@ -1,17 +1,23 @@
 #include <iostream>
 #include "Engine.h"
+#include "WsServer.h"
 
 int main(int argc, char** argv) {
     if (argc < 2) {
-        std::cerr << "Usage: " << argv[0] << " <path_to_model.gguf>" << std::endl;
+        std::cerr << "Usage: " << argv[0] << " <path_to_model.gguf> [port]" << std::endl;
         return 1;
     }
 
     std::string modelPath = argv[1];
+    int port = 3000;
+    if (argc >= 3) {
+        port = std::atoi(argv[2]);
+    }
 
+    // 1. Initialize Engine
     Core::Engine engine;
     
-    std::cout << "--- INFERENCE CORE ---" << std::endl;
+    std::cout << "--- INFERENCE CORE SERVER ---" << std::endl;
     std::cout << engine.getSystemInfo() << std::endl;
 
     Core::EngineConfig config;
@@ -25,14 +31,9 @@ int main(int argc, char** argv) {
     }
     std::cout << "Model loaded successfully." << std::endl;
 
-    std::string prompt = "Hello, I am an AI assistant. I can help you with";
-    std::cout << "\nPrompt: " << prompt << "\nGenerating...\n" << std::endl;
+    // 2. Start WebSocket Server
+    Server::WsServer server(engine, port);
+    server.run();
 
-    engine.generate(prompt, [](const std::string& token) {
-        std::cout << token << std::flush;
-        return true; // Continue
-    });
-
-    std::cout << "\n\nGeneration complete." << std::endl;
     return 0;
 }

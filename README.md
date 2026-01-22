@@ -34,14 +34,26 @@ El proyecto se encuentra en una etapa temprana pero funcional. El núcleo de inf
 ## Compilación y Uso
 
 ```bash
-mkdir build && cd build
+mkdir -p build && cd build
 cmake ..
 make -j4
-./InferenceCore /ruta/a/tu/modelo.gguf
+# Ejecutar Servidor (Puerto 3000 por defecto)
+./InferenceCore /ruta/a/tu/modelo.gguf 3000
+```
+
+### Cliente de Prueba (Python)
+Se incluye un script para verificar la conexión y métricas:
+```bash
+# Crear entorno virtual (opcional)
+python3 -m venv test_env && source test_env/bin/activate
+pip install websockets
+
+# Ejecutar test
+python3 test_client.py
 ```
 
 ## Roadmap Inmediato
 - [x] Fase 1: Core Engine
-- [ ] Fase 2: Servidor WebSocket (Zero-Latency Streaming)
+- [x] Fase 2: Servidor WebSocket (Zero-Latency Streaming + Métricas)
 - [ ] Fase 3: Monitorización Hardware (NVML)
 - [ ] Fase 4: Producción (Systemd, Watchdogs)
