@@ -16,6 +16,7 @@ namespace Server {
         constexpr const char* TOKEN = "token";
         constexpr const char* END   = "end";
         constexpr const char* ERROR = "error";
+        constexpr const char* METRICS = "metrics";  // Real-time system metrics
     }
 
     struct InferenceParams {

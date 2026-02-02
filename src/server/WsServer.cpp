@@ -1,12 +1,16 @@
 #include "WsServer.h"
+#include <chrono>
 
 namespace Server {
 
-    WsServer::WsServer(Core::Engine& engine, int port) 
-        : engine(engine), port(port) {
+    WsServer::WsServer(Core::Engine& engine, Hardware::Monitor& monitor, int port) 
+        : engine(engine), monitor(monitor), port(port) {
         
         // Start worker thread
         workerThread = std::thread(&WsServer::workerLoop, this);
+        
+        // Start metrics broadcasting thread
+        metricsThread = std::thread(&WsServer::metricsLoop, this);
     }
 
     WsServer::~WsServer() {
@@ -14,6 +18,9 @@ namespace Server {
         queueCv.notify_all();
         if (workerThread.joinable()) {
             workerThread.join();
+        }
+        if (metricsThread.joinable()) {
+            metricsThread.join();
         }
     }
 
@@ -23,8 +30,15 @@ namespace Server {
 
         uWS::App()
             .ws<PerSocketData>("/*", {
-                .open = [](auto* ws) {
+                .open = [this](auto* ws) {
                     std::cout << "Client connected!" << std::endl;
+                    
+                    // Add to connected clients
+                    {
+                        std::lock_guard<std::mutex> lock(clientsMutex);
+                        connectedClients.insert(ws);
+                    }
+                    
                     json hello = {
                         {"op", Op::HELLO},
                         {"status", "ready"}
@@ -57,6 +71,13 @@ namespace Server {
                 },
                 .close = [this](auto* ws, int code, std::string_view message) {
                     std::cout << "Client disconnected" << std::endl;
+                    
+                    // Remove from connected clients
+                    {
+                        std::lock_guard<std::mutex> lock(clientsMutex);
+                        connectedClients.erase(ws);
+                    }
+                    
                     if (currentWs == ws) {
                         abortCurrent = true;
                         currentWs = nullptr;
@@ -93,13 +114,13 @@ namespace Server {
     void WsServer::processInference(Task& task) {
         currentWs = task.ws;
         abortCurrent = false;
+        isGenerating = true;
 
         auto metrics = engine.generate(task.params.prompt, [this, &task](const std::string& token) {
             // Check abort
             if (abortCurrent) return false;
 
             // Send to main thread
-            // Copy token because 'token' ref might be invalid when defer runs
             std::string tokenCopy = token;
             
             loop->defer([this, task, tokenCopy]() {
@@ -115,6 +136,12 @@ namespace Server {
             
             return true;
         });
+
+        // Store metrics for broadcasting
+        {
+            std::lock_guard<std::mutex> lock(metricsMutex);
+            lastMetrics = metrics;
+        }
 
         // Finished
         loop->defer([this, task, metrics]() {
@@ -132,6 +159,61 @@ namespace Server {
                  
                  // Reset current
                  currentWs = nullptr;
+            }
+        });
+        
+        isGenerating = false;
+    }
+    
+    void WsServer::metricsLoop() {
+        while (running) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            
+            if (!running) break;
+            
+            broadcastMetrics();
+        }
+    }
+    
+    void WsServer::broadcastMetrics() {
+        // Get current GPU stats
+        auto gpuStats = monitor.updateStats();
+        
+        // Get current metrics
+        Core::Metrics currentMetrics;
+        {
+            std::lock_guard<std::mutex> lock(metricsMutex);
+            currentMetrics = lastMetrics;
+        }
+        
+        // Build metrics JSON
+        json metricsJson = {
+            {"op", Op::METRICS},
+            {"timestamp", std::chrono::system_clock::now().time_since_epoch().count()},
+            {"gpu", {
+                {"temp", gpuStats.temp},
+                {"vram_total_mb", gpuStats.memoryTotal / (1024*1024)},
+                {"vram_used_mb", gpuStats.memoryUsed / (1024*1024)},
+                {"vram_free_mb", gpuStats.memoryFree / (1024*1024)},
+                {"power_watts", gpuStats.powerUsage / 1000}, // Convert mW to W
+                {"fan_percent", gpuStats.fanSpeed},
+                {"throttling", gpuStats.throttle}
+            }},
+            {"inference", {
+                {"state", isGenerating.load() ? "generating" : "idle"},
+                {"last_tps", currentMetrics.tps},
+                {"last_ttft_ms", currentMetrics.ttft_ms},
+                {"total_tokens_generated", currentMetrics.tokens_generated}
+            }}
+        };
+        
+        std::string metricsStr = metricsJson.dump();
+        
+        // Broadcast to all connected clients
+        loop->defer([this, metricsStr]() {
+            std::lock_guard<std::mutex> lock(clientsMutex);
+            for (auto* ws : connectedClients) {
+                ws->send(metricsStr, uWS::OpCode::TEXT);
             }
         });
     }

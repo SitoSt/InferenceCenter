@@ -7,8 +7,10 @@
 #include <atomic>
 #include <condition_variable>
 #include <iostream>
+#include <set>
 #include "Protocol.h"
 #include "../core/Engine.h"
+#include "../hardware/Monitor.h"
 
 namespace Server {
 
@@ -18,7 +20,7 @@ namespace Server {
 
     class WsServer {
     public:
-        WsServer(Core::Engine& engine, int port = 3000);
+        WsServer(Core::Engine& engine, Hardware::Monitor& monitor, int port = 3000);
         ~WsServer();
 
         // Start the server loop (blocking)
@@ -26,6 +28,7 @@ namespace Server {
 
     private:
         Core::Engine& engine;
+        Hardware::Monitor& monitor;
         int port;
         
         // uWebSockets LOOP
@@ -44,13 +47,25 @@ namespace Server {
         
         std::atomic<bool> running{true};
         std::thread workerThread;
+        std::thread metricsThread;  // New: Metrics broadcasting thread
 
         // Current active generation (to support ABORT)
         std::atomic<bool> abortCurrent{false};
         uWS::WebSocket<false, true, PerSocketData>* currentWs = nullptr;
+        
+        // Track all connected clients for metrics broadcasting
+        std::set<uWS::WebSocket<false, true, PerSocketData>*> connectedClients;
+        std::mutex clientsMutex;
+        
+        // Metrics state
+        std::atomic<bool> isGenerating{false};
+        Core::Metrics lastMetrics;
+        std::mutex metricsMutex;
 
         void workerLoop();
         void processInference(Task& task);
+        void metricsLoop();  // New: Periodic metrics broadcast
+        void broadcastMetrics();  // New: Send metrics to all clients
     };
 
 }

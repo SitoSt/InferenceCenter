@@ -15,8 +15,8 @@ namespace Core {
 
     struct EngineConfig {
         std::string modelPath;
-        int n_gpu_layers = 99; // Default to max
-        int ctx_size = 2048;
+        int n_gpu_layers = -1; // -1 = auto-detect, 0 = CPU only, >0 = specific count
+        int ctx_size = 512;    // Reduced for short conversations
         bool use_mmap = true;
         bool use_mlock = false;
     };

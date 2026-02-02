@@ -4,14 +4,26 @@ project(InferenceCore LANGUAGES C CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 1. Buscar CUDA
-find_package(CUDAToolkit REQUIRED)
+# Option to enable/disable CUDA
+option(USE_CUDA "Enable CUDA support" OFF)
+
+if(USE_CUDA)
+    # 1. Buscar CUDA
+    find_package(CUDAToolkit REQUIRED)
+    add_compile_definitions(USE_CUDA)
+    message(STATUS "CUDA enabled")
+else()
+    message(STATUS "Building CPU-only version")
+endif()
+
 find_package(ZLIB REQUIRED) # Needed by uWebSockets
 
-# 2. IMPORTAR llama.cpp (Esto es la clave)
-# En lugar de buscar archivos .a, añadimos el subdirectorio.
-# Esto hace que las "metas" (targets) de llama estén disponibles.
-set(GGML_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
+# 2. IMPORTAR llama.cpp
+if(USE_CUDA)
+    set(GGML_CUDA ON CACHE BOOL "Enable CUDA" FORCE)
+else()
+    set(GGML_CUDA OFF CACHE BOOL "Disable CUDA" FORCE)
+endif()
 add_subdirectory(llama.cpp)
 
 find_package(Threads REQUIRED)
@@ -33,19 +45,12 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/uNetworking/uSockets.git
     GIT_TAG        v0.8.8
 )
-# uSockets is a bit tricky with CMake sometimes, but let's try standard approach or just source inclusion if needed.
-# Usually uWebSockets handles uSockets inclusion internally if not provided, 
-# but providing it explicitly gives more control. For simplicity in this env,
-# we might rely on uWebSockets finding it or including it if we encounter issues.
-# For now, let's use a known working fork or just uWebSockets strict.
-# Actually, uWebSockets v20+ is header only but needs uSockets.o linked.
 
 FetchContent_Declare(
     uwebsockets
     GIT_REPOSITORY https://github.com/uNetworking/uWebSockets.git
     GIT_TAG        v20.64.0
 )
-# FetchContent_MakeAvailable(usockets uwebsockets) <-- uSockets has no CMakeLists.txt!
 
 # 2.1 Manually configure uSockets
 FetchContent_GetProperties(usockets)
@@ -79,22 +84,29 @@ add_executable(${PROJECT_NAME}
     src/server/Protocol.h
     src/server/WsServer.h
     src/server/WsServer.cpp
+    src/hardware/Monitor.h
+    src/hardware/Monitor.cpp
 )
-target_include_directories(${PROJECT_NAME} PRIVATE src/core src/server)
+target_include_directories(${PROJECT_NAME} PRIVATE src/core src/server src/hardware)
 
 # 4. Enlazar usando los nombres de los objetivos, no rutas a archivos
-# Esto gestiona automáticamente las cabeceras (.h) y los archivos (.a)
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     llama 
     ggml 
     uSockets
     nlohmann_json::nlohmann_json
     ZLIB::ZLIB
-    CUDA::cudart
-    CUDA::cublas
-    Threads::Threads    # <--- Esta es la forma correcta en CMake
-    ${CMAKE_DL_LIBS}    # <--- Forma más segura de poner 'dl'
+    Threads::Threads
+    ${CMAKE_DL_LIBS}
 )
+
+if(USE_CUDA)
+    target_link_libraries(${PROJECT_NAME} PRIVATE 
+        CUDA::cudart
+        CUDA::cublas
+        CUDA::nvml
+    )
+endif()
 
 # uWebSockets is header only, so just include directory
 target_include_directories(${PROJECT_NAME} PRIVATE 
