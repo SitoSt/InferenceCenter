@@ -96,6 +96,8 @@ namespace Core {
         Metrics metrics;
         if (!isLoaded()) return metrics;
 
+        llama_memory_clear(llama_get_memory(ctx), false);
+
         auto start_time = std::chrono::high_resolution_clock::now();
         bool is_first_token = true;
 

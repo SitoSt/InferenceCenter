@@ -32,8 +32,13 @@ async def test():
                 print("\n[DONE]")
                 print(f"STATS: {json.dumps(data.get('stats'), indent=2)}")
                 break
+            elif op == "metrics":
+                # Ignore metrics during inference (they come every second)
+                # Uncomment below to see metrics:
+                # print(f"\n[METRICS] GPU: {data['gpu']['temp']}°C, VRAM: {data['gpu']['vram_used_mb']}MB", flush=True)
+                pass
             elif op == "error":
-                print(f"[ERROR] {data}")
+                print(f"\n[ERROR] {data}")
                 break
             else:
                 print(f"< {msg}")

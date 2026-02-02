@@ -1,6 +1,39 @@
 #include "WsServer.h"
 #include <chrono>
 
+namespace {
+    // Helper: Validate and clean UTF-8 string to prevent JSON serialization errors
+    std::string sanitizeUtf8(const std::string& input) {
+        std::string output;
+        output.reserve(input.size());
+        
+        for (size_t i = 0; i < input.size(); ) {
+            unsigned char c = input[i];
+            if (c < 0x80) {
+                // ASCII
+                output += c;
+                i++;
+            } else if ((c & 0xE0) == 0xC0 && i + 1 < input.size()) {
+                // 2-byte UTF-8
+                output += input.substr(i, 2);
+                i += 2;
+            } else if ((c & 0xF0) == 0xE0 && i + 2 < input.size()) {
+                // 3-byte UTF-8
+                output += input.substr(i, 3);
+                i += 3;
+            } else if ((c & 0xF8) == 0xF0 && i + 3 < input.size()) {
+                // 4-byte UTF-8
+                output += input.substr(i, 4);
+                i += 4;
+            } else {
+                // Invalid UTF-8, skip this byte
+                i++;
+            }
+        }
+        return output;
+    }
+}
+
 namespace Server {
 
     WsServer::WsServer(Core::Engine& engine, Hardware::Monitor& monitor, int port) 
@@ -126,9 +159,12 @@ namespace Server {
             loop->defer([this, task, tokenCopy]() {
                 // Verify if connection is still alive/active
                 if (currentWs == task.ws && currentWs != nullptr) {
+                     // Sanitize UTF-8 to prevent JSON serialization errors
+                     std::string validToken = sanitizeUtf8(tokenCopy);
+                     
                      json msg = {
                         {"op", Op::TOKEN},
-                        {"content", tokenCopy}
+                        {"content", validToken}
                      };
                      currentWs->send(msg.dump(), uWS::OpCode::TEXT);
                 }
