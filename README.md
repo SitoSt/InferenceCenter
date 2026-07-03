@@ -1,3 +1,11 @@
+![Status: Alternative](https://img.shields.io/badge/status-Alternative-yellow)
+
+> ⚠️ **Este repo está en modo Alternative.** Sin commits desde marzo 2026. Para nuevos deployments, recomendamos usar [`llama.cpp`](https://github.com/ggerganov/llama.cpp) standalone combinado con [OpenClaw](https://github.com/Jota-project/.github/blob/main/ARCHITECTURE.md) en lugar de `jota-orchestrator`. Este binario se mantiene por compatibilidad con setups existentes que usan `jota-orchestrator` + `jota-inference`.
+>
+> Si llegas aquí desde el [Jota-project](https://github.com/Jota-project), consulta el [org README](https://github.com/Jota-project/.github) para entender el rol de cada repo en el ecosistema.
+
+---
+
 # InferenceCenter
 
 High-performance inference engine with **parallel session support** and **API token authentication**, optimized for resource-constrained GPUs (GTX 1060 3GB). Built with `llama.cpp` directly integrated in C++ for maximum efficiency and minimal latency.
@@ -36,15 +44,21 @@ make -j$(nproc)
 ```
 
 ### 2. Configure Authentication
- 
- The server now uses **JotaDB** for centralized authentication.
- 
- Set the environment variable `JOTA_DB_URL` (defaults to `http://localhost:8000/api/db`):
- 
- ```bash
- export JOTA_DB_URL="http://production-db.internal/api/db"
- ```
- 
+
+The server supports two authentication modes:
+
+**Static token (recommended for simple deployments):**
+```bash
+export AUTH_TOKEN="your_secure_token_here"
+```
+
+**External auth via JotaDB (legacy setups):**
+The server can validate tokens against a central `jota-db` instance:
+```bash
+export JOTA_DB_URL="http://localhost:8000/api/db"
+```
+This mode is kept for compatibility with setups that centralize auth across multiple Jota services. For new deployments, prefer the static `AUTH_TOKEN` mode.
+
  ### 3. Run Server
  
  ```bash
@@ -529,3 +543,11 @@ This is a personal project optimized for specific hardware (GTX 1060 3GB). Sugge
 - [llama.cpp](https://github.com/ggerganov/llama.cpp) - Core inference engine
 - [uWebSockets](https://github.com/uNetworking/uWebSockets) - WebSocket server
 - [nlohmann/json](https://github.com/nlohmann/json) - JSON library
+
+---
+
+## Status & roadmap
+
+- **Status:** Alternative. Frozen on `1.1.0` (2026-03-16).
+- **No new feature work planned.** For new local LLM deployments, use `llama.cpp` standalone with OpenClaw.
+- **For new deployments:** see [org ARCHITECTURE.md](https://github.com/Jota-project/.github/blob/main/ARCHITECTURE.md) for the recommended stack.
